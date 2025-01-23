@@ -69,7 +69,7 @@ class Cy:
         return self
 
     def terminalL(self, msg="Enter line: "):
-        line_input = input(msg)
+        line_input = line_input.rstrip("\r")
         if self._xDataLines is None:
             self._xDataLines = []
         elif isinstance(self._xDataLines, str):
