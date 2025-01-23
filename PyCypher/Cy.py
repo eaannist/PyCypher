@@ -21,7 +21,12 @@ class Cy:
         self._xNewPwd = None
         self._xDel = False
         self._xDataLines = None
-
+        print('''
+    $$$$$$$$$$$$$$$$$$$$
+    $$ PY CIPHER v1.3 $$
+    $$ >> by eaannist $$
+    $$$$$$$$$$$$$$$$$$$$
+        ''')
     def enc(self, input_file=None):
         self._xMode = "enc"
         if input_file:
@@ -69,7 +74,7 @@ class Cy:
         return self
 
     def terminalL(self, msg="Enter line: "):
-        line_input = line_input.rstrip("\r")
+        line_input = input(msg).rstrip("\r")
         if self._xDataLines is None:
             self._xDataLines = []
         elif isinstance(self._xDataLines, str):
@@ -96,12 +101,6 @@ class Cy:
         return self._xExec()
 
     def _xExec(self):
-        print('''
-    $$$$$$$$$$$$$$$$$$$$
-    $$ PY CIPHER v1.3 $$
-    $$ >> by eaannist $$
-    $$$$$$$$$$$$$$$$$$$$
-        ''')
         if self._xMode == "enc":
             return self._xDoEncFile()
         elif self._xMode == "dec":
