@@ -5,7 +5,7 @@
 ## Installation
 
 ```bash
-pip install PyCypher
+pip install PyCypherLib
 ## Installazione
 
 ```
