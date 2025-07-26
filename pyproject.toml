@@ -7,7 +7,7 @@ name = "PyCypherLib"
 dynamic = ["version"]
 description = "Secure file encryption and decryption library with fluent API"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 authors = [{name = "eaannist", email = "eaannist@gmail.com"}]
 classifiers = [
     "Development Status :: 4 - Beta",
