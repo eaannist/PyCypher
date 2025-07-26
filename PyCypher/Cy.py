@@ -20,9 +20,6 @@ except ImportError:
     ARGON2_AVAILABLE = False
     print("Warning: argon2-cffi not installed. Using PBKDF2 as default.")
 
-MAGIC_ARGON2 = b"CY_A2_"
-MAGIC_PBKDF2 = b"CY_PB_"
-
 
 class Cy:
     def __init__(self, kdf_type=None):
@@ -47,7 +44,8 @@ class Cy:
             raise ValueError("Invalid KDF type. Use 'A' for Argon2 or 'P' for PBKDF2")
 
         kdf_name = "Argon2" if self._kdf_type == "A" else "PBKDF2"
-        printBanner('PyCypher', 'v1.4.0', f'by eaannist [{kdf_name}]', '█')
+        printBanner('PyCypher', 'v1.4.0', 'by eaannist', '█')
+        print(f"Using {kdf_name} KDF.")
 
     def enc(self, input_file=None):
         self._xMode = "enc"
@@ -177,30 +175,33 @@ class Cy:
         return self._xExec()
 
     def _xExec(self):
-        if self._xMode == "enc":
-            return self._xDoEncFile()
-        elif self._xMode == "dec":
-            return self._xDoDecFile()
-        elif self._xMode == "run":
-            return self._xDoRunFile()
-        elif self._xMode == "enc_lines":
-            return self._xDoEncLines()
-        elif self._xMode == "dec_lines":
-            return self._xDoDecLines()
-        elif self._xMode == "changeP":
-            return self._xDoChangePwd()
-        else:
-            raise ValueError("No valid mode selected.")
+        match self._xMode:
+            case "enc":
+                return self._xDoEncFile()
+            case "dec":
+                return self._xDoDecFile()
+            case "run":
+                return self._xDoRunFile()
+            case "enc_lines":
+                return self._xDoEncLines()
+            case "dec_lines":
+                return self._xDoDecLines()
+            case "changeP":
+                return self._xDoChangePwd()
+            case _:
+                raise ValueError("No valid mode selected.")
 
     def _detect_kdf_type(self, enc_data):
         if len(enc_data) < 6:
             return "legacy"
-        if enc_data.startswith(MAGIC_ARGON2):
-            return "A"
-        elif enc_data.startswith(MAGIC_PBKDF2):
-            return "P"
-        else:
-            return "legacy"
+
+        match True:
+            case _ if enc_data.startswith(b"CY_A2_"):
+                return "A"
+            case _ if enc_data.startswith(b"CY_PB_"):
+                return "P"
+            case _:
+                return "legacy"
 
     def _xKdfArgon2(self, password, salt):
         if not ARGON2_AVAILABLE:
@@ -254,12 +255,13 @@ class Cy:
         if kdf_type is None:
             kdf_type = self._kdf_type
 
-        if kdf_type == "A":
-            return self._xKdfArgon2(password, salt)
-        elif kdf_type == "P":
-            return self._xKdfPBKDF2(password, salt)
-        else:
-            raise ValueError(f"Unknown KDF type: {kdf_type}")
+        match kdf_type:
+            case "A":
+                return self._xKdfArgon2(password, salt)
+            case "P":
+                return self._xKdfPBKDF2(password, salt)
+            case _:
+                raise ValueError(f"Unknown KDF type: {kdf_type}")
 
     def _xEncData(self, data, password):
         salt = os.urandom(16)
@@ -270,9 +272,9 @@ class Cy:
         del key
 
         if self._kdf_type == "A":
-            magic = MAGIC_ARGON2
+            magic = b"CY_A2_"
         else:
-            magic = MAGIC_PBKDF2
+            magic = b"CY_PB_"
 
         return magic + salt + encrypted_data
 

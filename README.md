@@ -1,6 +1,6 @@
 # PyCypher
 
-**PyCypher** is a Python library based on the libraries [cryptography](https://pypi.org/project/cryptography/) and [argon2](https://pypi.org/project/argon2-cffi/) that provides secure encryption and decryption, plus an optional decrypt&execute option encrypted Python scripts. It attempts to securely wipe in-memory data and input files (on a best-effort basis, not guaranteed on all systems).
+**PyCypher** is a Python library based on the libraries [cryptography](https://pypi.org/project/cryptography/) and [argon2](https://pypi.org/project/argon2-cffi/) that provides secure encryption and decryption, plus an optional decrypt&execute feature for encrypted Python scripts. It attempts to securely wipe in-memory data and input files (on a best-effort basis, not guaranteed on all systems).
 
 ## Installation
 

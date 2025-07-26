@@ -16,10 +16,12 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Security :: Cryptography",
 ]
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 dependencies = [
     "cryptography>=3.0.0",
+    "argon2-cffi>=21.0.0",
 ]
+
 
 [project.urls]
 Homepage = "https://github.com/eaannist/PyCypher"
