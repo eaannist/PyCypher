@@ -44,7 +44,7 @@ class Cy:
             raise ValueError("Invalid KDF type. Use 'A' for Argon2 or 'P' for PBKDF2")
 
         kdf_name = "Argon2" if self._kdf_type == "A" else "PBKDF2"
-        printBanner('PyCypher', 'v1.4.0', 'by eaannist', '█')
+        printBanner('PyCypher', 'v1.4.1', 'by eaannist', '█')
         print(f"Using {kdf_name} KDF.")
 
     def enc(self, input_file=None):
