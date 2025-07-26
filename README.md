@@ -1,32 +1,37 @@
 # PyCypher
 
-**PyCypher** is a Python library based on the library [cryptography](https://pypi.org/project/cryptography/) that provides secure encryption and decryption of files and strings, plus an optional decrypt&execute option encrypted Python scripts. It attempts to securely wipe in-memory data and input files (on a best-effort basis, not guaranteed on all systems).
+**PyCypher** is a Python library based on the libraries [cryptography](https://pypi.org/project/cryptography/) and [argon2](https://pypi.org/project/argon2-cffi/) that provides secure encryption and decryption, plus an optional decrypt&execute option encrypted Python scripts. It attempts to securely wipe in-memory data and input files (on a best-effort basis, not guaranteed on all systems).
 
 ## Installation
 
 ```bash
 pip install PyCypherLib
-
 ```
+
 ## Usage
 
 ```python
-
 # Import the PyCypher library:
 from PyCypher import Cy
 
-# Base methods for encryption and decryption ations
+# KDF Selection:
+# Cy()    - Default: Argon2 (recommended for maximum security)
+# Cy("A") - Explicit: Argon2
+# Cy("P") - Explicit: PBKDF2
+# All modes support auto-detection of encrypted file formats
+
+# Base methods for encryption and decryption operations
 # using the .P() method to type the password manually
 Cy().enc("file.txt").P("yourpassword")
 Cy().dec("file.txt.cy").P("yourpassword")
 
-# With rhe .run() method you can 'decrypt&run' an encrypted python scrypt
+# With the .run() method you can 'decrypt&run' an encrypted python script
 Cy().run("file.py.cy").P("yourpassword")
 
 # By default the encrypted file is saved with the .cy extension added to the input file name
 Cy().dec("file.txt.cy").P("yourpassword")
 
-# Use the .newNme() method to specify the output file name 
+# Use the .newName() method to specify the output file name 
 Cy().enc("file.txt").newName("file.enc").P("yourpassword")
 
 # Use the .delInput() method to automatically delete the input file
@@ -60,8 +65,12 @@ key,token = Cy().decLines('credentials.cy').terminalP('Enter a password to acces
 # Use the .changeP() and .newP() methods to change the encryption password of an encrypted file
 Cy().changeP('credentials.cy').newP('newpassword').P('oldpassword')
 
+# Examples with explicit KDF selection:
+Cy("A").enc("sensitive.txt").P("strongpassword")    # Force Argon2
+Cy("P").enc("legacy.txt").P("oldpassword")          # Force PBKDF2
 ```
 
 ## Development status
 
 **PyCypher** is a work-in-progress personal project. Suggestions, feature requests, and constructive feedback are highly welcome. Feel free to open an issue or submit a pull request.
+```

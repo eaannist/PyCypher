@@ -1,4 +1,3 @@
-
 import os
 import sys
 import base64
@@ -13,9 +12,20 @@ except ImportError:
     print("Please install 'cryptography'.")
     sys.exit(1)
 
+try:
+    from argon2.low_level import hash_secret, Type
+
+    ARGON2_AVAILABLE = True
+except ImportError:
+    ARGON2_AVAILABLE = False
+    print("Warning: argon2-cffi not installed. Using PBKDF2 as default.")
+
+MAGIC_ARGON2 = b"CY_A2_"
+MAGIC_PBKDF2 = b"CY_PB_"
+
 
 class Cy:
-    def __init__(self):
+    def __init__(self, kdf_type=None):
         self._xMode = None
         self._xfIn = None
         self._xfOut = None
@@ -24,7 +34,20 @@ class Cy:
         self._xDel = False
         self._xDataLines = None
         self._xToData = False
-        printBanner('PyCypher', 'v1.3.5', 'by eaannist', '█')
+
+        if kdf_type is None:
+            self._kdf_type = "A" if ARGON2_AVAILABLE else "P"
+        elif kdf_type.upper() in ["A", "P"]:
+            if kdf_type.upper() == "A" and not ARGON2_AVAILABLE:
+                print("Warning: Argon2 not available, falling back to PBKDF2")
+                self._kdf_type = "P"
+            else:
+                self._kdf_type = kdf_type.upper()
+        else:
+            raise ValueError("Invalid KDF type. Use 'A' for Argon2 or 'P' for PBKDF2")
+
+        kdf_name = "Argon2" if self._kdf_type == "A" else "PBKDF2"
+        printBanner('PyCypher', 'v1.4.0', f'by eaannist [{kdf_name}]', '█')
 
     def enc(self, input_file=None):
         self._xMode = "enc"
@@ -120,8 +143,8 @@ class Cy:
     def newP(self, password):
         if not password:
             raise ValueError("New password cannot be empty.")
-        if len(password) < 4:
-            raise ValueError("Password too short (minimum 4 characters).")
+        if len(password) < 8:
+            raise ValueError("Password too short (minimum 8 characters).")
         self._xNewPwd = password
         return self
 
@@ -130,15 +153,14 @@ class Cy:
         return self
 
     def toData(self):
-        """Return data instead of writing to file"""
         self._xToData = True
         return self
 
     def P(self, password):
         if not password:
             raise ValueError("Password cannot be empty.")
-        if len(password) < 4:
-            raise ValueError("Password too short (minimum 4 characters).")
+        if len(password) < 8:
+            raise ValueError("Password too short (minimum 8 characters).")
         self._xPwd = password
         return self._xExec()
 
@@ -150,8 +172,8 @@ class Cy:
 
         if not self._xPwd:
             raise ValueError("Password cannot be empty.")
-        if len(self._xPwd) < 4:
-            raise ValueError("Password too short (minimum 4 characters).")
+        if len(self._xPwd) < 8:
+            raise ValueError("Password too short (minimum 8 characters).")
         return self._xExec()
 
     def _xExec(self):
@@ -170,7 +192,42 @@ class Cy:
         else:
             raise ValueError("No valid mode selected.")
 
-    def _xKdf(self, password, salt):
+    def _detect_kdf_type(self, enc_data):
+        if len(enc_data) < 6:
+            return "legacy"
+        if enc_data.startswith(MAGIC_ARGON2):
+            return "A"
+        elif enc_data.startswith(MAGIC_PBKDF2):
+            return "P"
+        else:
+            return "legacy"
+
+    def _xKdfArgon2(self, password, salt):
+        if not ARGON2_AVAILABLE:
+            raise ValueError("Argon2 not available. Install argon2-cffi.")
+
+        pwd_bytes = password.encode("utf-8")
+        try:
+            hash_result = hash_secret(
+                secret=pwd_bytes,
+                salt=salt,
+                time_cost=3,
+                memory_cost=65536,
+                parallelism=1,
+                hash_len=32,
+                type=Type.ID
+            )
+
+            pwd_bytes = bytearray(pwd_bytes)
+            for i in range(len(pwd_bytes)):
+                pwd_bytes[i] = 0
+            del pwd_bytes
+
+            return base64.urlsafe_b64encode(hash_result)
+        except Exception as e:
+            raise ValueError(f"Argon2 key derivation failed: {str(e)}")
+
+    def _xKdfPBKDF2(self, password, salt):
         pwd_bytes = bytearray(password.encode("utf-8"))
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
@@ -180,9 +237,11 @@ class Cy:
             backend=default_backend()
         )
         key_material = kdf.derive(pwd_bytes)
+
         for i in range(len(pwd_bytes)):
             pwd_bytes[i] = 0
         del pwd_bytes
+
         key = base64.urlsafe_b64encode(key_material)
         temp_ba = bytearray(key_material)
         for i in range(len(temp_ba)):
@@ -191,6 +250,17 @@ class Cy:
         del temp_ba
         return key
 
+    def _xKdf(self, password, salt, kdf_type=None):
+        if kdf_type is None:
+            kdf_type = self._kdf_type
+
+        if kdf_type == "A":
+            return self._xKdfArgon2(password, salt)
+        elif kdf_type == "P":
+            return self._xKdfPBKDF2(password, salt)
+        else:
+            raise ValueError(f"Unknown KDF type: {kdf_type}")
+
     def _xEncData(self, data, password):
         salt = os.urandom(16)
         key = self._xKdf(password, salt)
@@ -198,15 +268,31 @@ class Cy:
         encrypted_data = cipher_suite.encrypt(data)
         self._xZero(key)
         del key
-        return salt + encrypted_data
+
+        if self._kdf_type == "A":
+            magic = MAGIC_ARGON2
+        else:
+            magic = MAGIC_PBKDF2
+
+        return magic + salt + encrypted_data
 
     def _xDecData(self, enc_data, password):
-        if len(enc_data) < 16:
-            raise ValueError("Invalid encrypted data format.")
+        detected_kdf = self._detect_kdf_type(enc_data)
 
-        salt = enc_data[:16]
-        encrypted = enc_data[16:]
-        key = self._xKdf(password, salt)
+        if detected_kdf == "legacy":
+            if len(enc_data) < 16:
+                raise ValueError("Invalid encrypted data format.")
+            salt = enc_data[:16]
+            encrypted = enc_data[16:]
+            kdf_type = "P"
+        else:
+            if len(enc_data) < 22:
+                raise ValueError("Invalid encrypted data format.")
+            salt = enc_data[6:22]
+            encrypted = enc_data[22:]
+            kdf_type = detected_kdf
+
+        key = self._xKdf(password, salt, kdf_type)
         cipher_suite = Fernet(key)
         try:
             decrypted = cipher_suite.decrypt(encrypted)
@@ -286,6 +372,7 @@ class Cy:
             return result
 
         out_file = self._xfOut or (self._xfIn + ".cy")
+        kdf_name = "Argon2" if self._kdf_type == "A" else "PBKDF2"
 
         try:
             with open(out_file, "wb") as f:
@@ -299,9 +386,9 @@ class Cy:
 
         if self._xDel:
             self._xFileDel(self._xfIn)
-            print(f"Encrypted and deleted '{self._xfIn}' -> '{out_file}'.")
+            print(f"Encrypted [{kdf_name}] and deleted '{self._xfIn}' -> '{out_file}'.")
         else:
-            print(f"Encrypted '{self._xfIn}' -> '{out_file}'.")
+            print(f"Encrypted [{kdf_name}] '{self._xfIn}' -> '{out_file}'.")
         return self
 
     def _xDoDecFile(self):
@@ -389,24 +476,58 @@ class Cy:
         except UnicodeDecodeError:
             raise ValueError("Invalid Python script encoding.")
 
+        script_globals = {
+            '__name__': '__main__',
+            '__file__': self._xfIn.replace('.cy', ''),
+            '__builtins__': __builtins__,
+        }
+
+        original_cwd = os.getcwd()
+        script_dir = os.path.dirname(os.path.abspath(self._xfIn))
+        if script_dir:
+            os.chdir(script_dir)
+
+        original_argv = sys.argv.copy()
+        sys.argv = [self._xfIn.replace('.cy', '')]
+
         print("Executing decrypted content...")
         try:
-            compile(code_str, self._xfIn, 'exec')
-            exec(code_str, globals())
+            compiled_code = compile(code_str, script_globals['__file__'], 'exec')
+            exec(compiled_code, script_globals)
+            print("Execution completed successfully.")
+
+        except SyntaxError as e:
+            print(f"Syntax error in encrypted script: {e}")
+            raise ValueError(f"Invalid Python syntax: {e}")
+        except SystemExit as e:
+            print(f"Script exited with code: {e.code}")
+        except KeyboardInterrupt:
+            print("Script execution interrupted by user.")
+            raise
+        except Exception as e:
+            print(f"Runtime error during execution: {e}")
+            raise ValueError(f"Script execution failed: {e}")
+        finally:
+            os.chdir(original_cwd)
+            sys.argv = original_argv
+
             self._xZero(code_str.encode("utf-8"))
             del code_str
-        except SyntaxError:
-            raise ValueError("Invalid Python syntax in encrypted script.")
-        except Exception as e:
-            print(f"Execution error: {str(e)}")
-        finally:
-            print('Execution completed.')
+
+            for key in list(script_globals.keys()):
+                if key not in ['__name__', '__file__', '__builtins__']:
+                    try:
+                        del script_globals[key]
+                    except:
+                        pass
 
         self._xZero(dec_data)
         del dec_data
+
         if self._xDel:
             self._xFileDel(self._xfIn)
             print(f"Executed and deleted '{self._xfIn}'.")
+
         self._xWipe()
         return self
 
@@ -432,6 +553,7 @@ class Cy:
             return result
 
         out_file = self._xfOut or "cyfile.cy"
+        kdf_name = "Argon2" if self._kdf_type == "A" else "PBKDF2"
 
         try:
             with open(out_file, "wb") as f:
@@ -446,7 +568,7 @@ class Cy:
         self._xZero(enc_data)
         del enc_data
         self._xWipe()
-        print(f"Encrypted lines -> '{out_file}'.")
+        print(f"Encrypted [{kdf_name}] lines -> '{out_file}'.")
         return self
 
     def _xDoDecLines(self):
@@ -538,8 +660,9 @@ class Cy:
 
         self._xZero(new_enc_data)
         del new_enc_data
+        kdf_name = "Argon2" if self._kdf_type == "A" else "PBKDF2"
         self._xWipe()
-        print(f"Password changed for '{self._xfIn}'.")
+        print(f"Password changed [{kdf_name}] for '{self._xfIn}'.")
         return self
 
 
