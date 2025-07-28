@@ -13,8 +13,8 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from argon2.low_level import hash_secret, Type
-
+    from argon2 import PasswordHasher
+    from argon2.low_level import hash_secret_raw, Type
     ARGON2_AVAILABLE = True
 except ImportError:
     ARGON2_AVAILABLE = False
@@ -36,7 +36,7 @@ class Cy:
             self._kdf_type = "A" if ARGON2_AVAILABLE else "P"
         elif kdf_type.upper() in ["A", "P"]:
             if kdf_type.upper() == "A" and not ARGON2_AVAILABLE:
-                print("Warning: Argon2 not available, falling back to PBKDF2")
+                print("Warning: argon2-cffi not installed. Using PBKDF2 as default")
                 self._kdf_type = "P"
             else:
                 self._kdf_type = kdf_type.upper()
@@ -44,7 +44,7 @@ class Cy:
             raise ValueError("Invalid KDF type. Use 'A' for Argon2 or 'P' for PBKDF2")
 
         kdf_name = "Argon2" if self._kdf_type == "A" else "PBKDF2"
-        printBanner('PyCypher', 'v1.4.1', 'by eaannist', '█')
+        printBanner('PyCypher', 'v1.4.2', 'by eaannist', '█')
         print(f"Using {kdf_name} KDF.")
 
     def enc(self, input_file=None):
@@ -207,10 +207,9 @@ class Cy:
         if not ARGON2_AVAILABLE:
             raise ValueError("Argon2 not available. Install argon2-cffi.")
 
-        pwd_bytes = password.encode("utf-8")
         try:
-            hash_result = hash_secret(
-                secret=pwd_bytes,
+            hash_result = hash_secret_raw(
+                secret=password.encode("utf-8"),
                 salt=salt,
                 time_cost=3,
                 memory_cost=65536,
@@ -219,12 +218,15 @@ class Cy:
                 type=Type.ID
             )
 
-            pwd_bytes = bytearray(pwd_bytes)
-            for i in range(len(pwd_bytes)):
-                pwd_bytes[i] = 0
-            del pwd_bytes
+            key = base64.urlsafe_b64encode(hash_result)
+            hash_result_ba = bytearray(hash_result)
 
-            return base64.urlsafe_b64encode(hash_result)
+            for i in range(len(hash_result_ba)):
+                hash_result_ba[i] = 0
+            del hash_result_ba
+            del hash_result
+
+            return key
         except Exception as e:
             raise ValueError(f"Argon2 key derivation failed: {str(e)}")
 
